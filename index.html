@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ことばポーカー — デモ</title>
+  <style>
+    :root { --bg1:#667eea; --bg2:#764ba2; --accent:#ff8c00; }
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN",sans-serif;
+      margin:0;min-height:100vh;
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#222;padding:24px;}
+    .wrap{max-width:900px;margin:0 auto}
+    header{color:#fff;text-align:center;margin-bottom:18px}
+    .panel{background:#fff;border-radius:10px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,.12);margin-bottom:14px}
+    input[type="text"],input[type="number"]{padding:8px;border:1px solid #ddd;border-radius:6px}
+    button{padding:8px 12px;border-radius:6px;border:0;cursor:pointer;background:#2b6cb0;color:#fff;font-weight:600}
+    button:hover{opacity:.9}
+    button.secondary{background:#4a5568}
+    button.success{background:#38a169}
+    .players-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .badge{padding:6px 10px;border-radius:999px;color:#fff;font-weight:600}
+    .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+    .info-item{background:#f7fafc;padding:10px;border-radius:8px;text-align:center}
+    .players-area{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+    .player-card{padding:10px;border-radius:8px;background:#fff;border:1px solid #eee}
+    .player-card.active{outline:3px solid #ffd700;background:#fffbeb}
+    .player-card.rank-1{border-left:4px solid #ffd700}
+    .player-card.rank-2{border-left:4px solid #c0c0c0}
+    .player-card.rank-3{border-left:4px solid #cd7f32}
+    .cards{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:12px 0}
+    .card{width:60px;height:80px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;border:2px solid #ccc;cursor:pointer;user-select:none;transition:all .15s}
+    .card:hover{border-color:#999;transform:scale(1.05)}
+    .card.selected{transform:translateY(-8px);box-shadow:0 8px 20px rgba(0,0,0,.2);border-color:var(--accent);background:linear-gradient(180deg,#fff9e6,#ffe6b3)}
+    .card.used{opacity:.4;pointer-events:none;background:#e2e8f0}
+    .selected-area{min-height:40px;border:2px dashed #cbd5e0;padding:8px;border-radius:8px;background:#f7fafc}
+    .turn-info{background:#ebf8ff;border:1px solid #90cdf4;padding:10px;border-radius:8px;margin-bottom:12px}
+    .turn-plays{margin-top:8px;font-size:14px}
+    .turn-plays span{display:inline-block;background:#bee3f8;padding:2px 8px;border-radius:4px;margin:2px}
+    .result{margin-top:12px;padding:12px;border-radius:8px;background:#e6fffa;border:1px solid #81e6d9}
+    .result.highlight{background:#fefcbf;border-color:#f6e05e;animation:pulse .5s}
+    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+    table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+    th,td{padding:6px;text-align:left;border-bottom:1px solid #eee}
+    footer{color:#fff;text-align:center;margin-top:18px;opacity:.9;font-size:13px}
+    
+    /* ゲーム終了モーダル */
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+    .modal.show{display:flex}
+    .modal-content{background:#fff;border-radius:12px;padding:32px;max-width:500px;width:90%;text-align:center;animation:modalIn .3s}
+    @keyframes modalIn{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+    .modal-content h2{margin:0 0 16px;color:#2d3748;font-size:28px}
+    .modal-content .winner{font-size:48px;margin:16px 0}
+    .scoreboard{margin:24px 0;text-align:left}
+    .scoreboard-item{padding:12px;margin:8px 0;border-radius:8px;background:#f7fafc;display:flex;justify-content:space-between;align-items:center}
+    .scoreboard-item.winner{background:linear-gradient(135deg,#ffd700,#ffed4e);font-weight:700}
+    .scoreboard-item .rank{width:32px;height:32px;border-radius:50%;background:#2b6cb0;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;margin-right:12px}
+    .scoreboard-item.winner .rank{background:#ff8c00}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🎴 ことばポーカー</h1>
+      <p style="opacity:.9">カードを選んで役を作ろう！複数回出してからターン終了！（全3ターン）</p>
+    </header>
+
+    <section class="panel" id="setup-panel">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="player-name" type="text" placeholder="プレイヤー名" />
+        <button id="add-player">追加</button>
+        <button id="start-game" class="secondary">ゲーム開始</button>
+        <button id="reset" class="secondary">リセット</button>
+      </div>
+      <div class="players-list" id="players-list"></div>
+      <p style="font-size:13px;color:#666;margin-top:12px">※デッキ枚数はプレイヤー人数に応じて自動調整されます</p>
+    </section>
+
+    <section class="panel" id="game-panel" style="display:none">
+      <div class="info-grid">
+        <div class="info-item"><strong>ラウンド</strong><div id="round">0/3</div></div>
+        <div class="info-item"><strong>残りカード</strong><div id="deck-count">0</div></div>
+        <div class="info-item"><strong>現在</strong><div id="current-player">-</div></div>
+      </div>
+      <div class="players-area" id="players-area"></div>
+    </section>
+
+    <section class="panel" id="hand-panel" style="display:none">
+      <div class="turn-info">
+        <strong>📍 ターン中</strong>: <span id="turn-player-name"></span>
+        <div>フェーズ: <strong id="phase-label">交換</strong></div>
+        <div>このターンの得点: <strong id="turn-score">0</strong>点</div>
+        <div class="turn-plays">出した役: <span id="turn-plays-list">（まだなし）</span></div>
+      </div>
+
+      <!-- 交換フェーズ -->
+      <div id="exchange-phase">
+        <h3>🔄 手札交換（任意）</h3>
+        <p style="font-size:14px;color:#666">交換したいカードを選んで「交換する」を押すか、そのまま「交換しない」で進めます。</p>
+        <div class="cards" id="exchange-cards"></div>
+        <div class="selected-area">
+          <strong>交換するカード:</strong> <span id="exchange-selected-list">（なし）</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap">
+          <button id="do-exchange-btn">交換する</button>
+          <button id="skip-exchange-btn" class="secondary">交換しない →</button>
+        </div>
+      </div>
+
+      <!-- プレイフェーズ -->
+      <div id="play-phase" style="display:none">
+        <h3>🃏 手札（使用済みはグレー）</h3>
+        <div class="cards" id="hand-cards"></div>
+        <div class="selected-area">
+          <strong>選択中:</strong> <span id="selected-list">（なし）</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap">
+          <button id="play-btn">出す（役判定）</button>
+          <button id="clear-btn" class="secondary">選択クリア</button>
+          <button id="end-turn-btn" class="success">ターン終了 →</button>
+        </div>
+        <div class="result" id="last-result" style="display:none"></div>
+      </div>
+
+      <div style="margin-top:16px">
+        <h4>役表</h4>
+        <table>
+          <thead><tr><th>役</th><th>条件</th><th>得点</th></tr></thead>
+          <tbody>
+            <tr><td>ワンペア</td><td>2枚出す</td><td>+2</td></tr>
+            <tr><td>スリーカード</td><td>3枚出す</td><td>+5</td></tr>
+            <tr><td>フォーカード</td><td>4枚出す</td><td>+10</td></tr>
+            <tr><td>ファイブカード</td><td>5枚出す</td><td>+15</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:13px;color:#666;margin-top:8px">※1枚だけ出す場合は0点です。<br>※ツーペア（2枚×2回）やフルハウス（3枚+2枚）は分けて出すことで合計点を獲得できます。</p>
+      </div>
+    </section>
+
+    <!-- ゲーム終了モーダル -->
+    <div class="modal" id="game-over-modal">
+      <div class="modal-content">
+        <h2>🎉 ゲーム終了！</h2>
+        <div class="winner" id="winner-display">🏆</div>
+        <div class="scoreboard" id="final-scoreboard"></div>
+        <button id="replay-btn" style="padding:12px 24px;font-size:16px">もう一度プレイ</button>
+      </div>
+    </div>
+
+    <footer>© ことばポーカー デモ</footer>
+  </div>
+
+  <script>
+(function(){
+  const SYLLABLES = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんー'.split('');
+  const MAX_ROUNDS = 3;
+  let deck=[], players=[], currentIdx=0, round=0, handSize=5;
+  
+  // ターン内の状態
+  let turnScore=0;
+  let turnPlays=[];
+  let usedIndices=new Set();
+  let selectedOrder=[];
+  let exchangeSelected=[];
+  let phase='exchange';
+  
+  const COLORS = ['#2b6cb0','#48bb78','#f6ad55','#ed64a6','#9f7aea','#4fd1c5'];
+  const $=id=>document.getElementById(id);
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*i+1|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+
+  function buildDeck(){
+    deck=[];
+    const numPlayers = players.length;
+    // プレイヤー人数分だけ各文字を追加
+    for(let i=0;i<numPlayers;i++){
+      deck.push(...SYLLABLES);
+    }
+    shuffle(deck);
+  }
+
+  function calcPoints(cards){
+    const len = cards.length;
+    let role='なし', pts=0;
+    if(len>=5){ role='ファイブカード'; pts=15; }
+    else if(len===4){ role='フォーカード'; pts=10; }
+    else if(len===3){ role='スリーカード'; pts=5; }
+    else if(len===2){ role='ワンペア'; pts=2; }
+    else if(len===1){ role='1枚'; pts=0; }
+    return {role, pts};
+  }
+
+  function renderSetup(){
+    $('players-list').innerHTML=players.map(p=>
+      `<span class="badge" style="background:${p.color}">${p.name}(${p.score})</span>`
+    ).join('');
+  }
+
+  function getRankedPlayers(){
+    return [...players].sort((a,b)=>b.score-a.score);
+  }
+
+  function renderGame(){
+    $('round').textContent=`${round}/${MAX_ROUNDS}`;
+    $('deck-count').textContent=deck.length;
+    $('current-player').textContent=players[currentIdx]?.name||'-';
+    
+    const ranked = getRankedPlayers();
+    $('players-area').innerHTML=players.map((p,i)=>{
+      const rank = ranked.findIndex(r=>r===p)+1;
+      let rankClass = '';
+      if(rank===1)rankClass=' rank-1';
+      else if(rank===2)rankClass=' rank-2';
+      else if(rank===3)rankClass=' rank-3';
+      
+      return `<div class="player-card${i===currentIdx?' active':''}${rankClass}">
+        <strong>${p.name}</strong> <small>${p.score}点</small>
+        <div style="font-size:12px;color:#666;margin-top:4px">手札:${p.hand.length}枚</div>
+      </div>`;
+    }).join('');
+  }
+
+  function showExchangePhase(){
+    phase='exchange';
+    $('phase-label').textContent='交換';
+    $('exchange-phase').style.display='block';
+    $('play-phase').style.display='none';
+    $('turn-player-name').textContent=players[currentIdx]?.name||'';
+    $('turn-score').textContent='0';
+    $('turn-plays-list').innerHTML='（まだなし）';
+    renderExchangeHand();
+  }
+
+  function showPlayPhase(){
+    phase='play';
+    $('phase-label').textContent='カードを出す';
+    $('exchange-phase').style.display='none';
+    $('play-phase').style.display='block';
+    renderHand();
+  }
+
+  function renderExchangeHand(){
+    const p=players[currentIdx];
+    if(!p)return;
+    exchangeSelected=[];
+    $('exchange-selected-list').textContent='（なし）';
+    $('exchange-cards').innerHTML=p.hand.map((c,i)=>
+      `<div class="card" data-idx="${i}">${c}</div>`
+    ).join('');
+    
+    $('exchange-cards').querySelectorAll('.card').forEach(el=>{
+      el.onclick=()=>{
+        const idx=parseInt(el.dataset.idx);
+        const val=el.textContent;
+        if(el.classList.contains('selected')){
+          el.classList.remove('selected');
+          exchangeSelected=exchangeSelected.filter(s=>s.idx!==idx);
+        }else{
+          el.classList.add('selected');
+          exchangeSelected.push({idx,val});
+        }
+        $('exchange-selected-list').textContent=exchangeSelected.length
+          ?exchangeSelected.map(s=>s.val).join(' ')
+          :'（なし）';
+      };
+    });
+  }
+
+  function doExchange(){
+    if(!exchangeSelected.length){
+      alert('交換するカードを選んでください');
+      return;
+    }
+    const p=players[currentIdx];
+    const idxs=exchangeSelected.map(s=>s.idx).sort((a,b)=>b-a);
+    idxs.forEach(i=>p.hand.splice(i,1));
+    while(p.hand.length<handSize && deck.length>0){
+      p.hand.push(deck.pop());
+    }
+    renderGame();
+    showPlayPhase();
+  }
+
+  function skipExchange(){
+    showPlayPhase();
+  }
+
+  function renderHand(){
+    const p=players[currentIdx];
+    if(!p)return;
+    selectedOrder=[];
+    $('selected-list').textContent='（なし）';
+    $('hand-cards').innerHTML=p.hand.map((c,i)=>
+      `<div class="card${usedIndices.has(i)?' used':''}" data-idx="${i}">${c}</div>`
+    ).join('');
+    
+    $('hand-cards').querySelectorAll('.card:not(.used)').forEach(el=>{
+      el.onclick=()=>{
+        const idx=parseInt(el.dataset.idx);
+        const val=el.textContent;
+        if(el.classList.contains('selected')){
+          el.classList.remove('selected');
+          selectedOrder=selectedOrder.filter(s=>s.idx!==idx);
+        }else{
+          el.classList.add('selected');
+          selectedOrder.push({idx,val});
+        }
+        $('selected-list').textContent=selectedOrder.length
+          ?selectedOrder.map(s=>s.val).join(' ')
+          :'（なし）';
+      };
+    });
+  }
+
+  function playCards(){
+    if(!selectedOrder.length){
+      alert('カードを選んでください');
+      return;
+    }
+    const selVals=selectedOrder.map(s=>s.val);
+    const selIdxs=selectedOrder.map(s=>s.idx);
+    const res=calcPoints(selVals);
+    
+    turnScore+=res.pts;
+    turnPlays.push(`${selVals.join('')}(${res.role}:+${res.pts})`);
+    selIdxs.forEach(i=>usedIndices.add(i));
+    selectedOrder=[];
+    
+    $('turn-score').textContent=turnScore;
+    $('turn-plays-list').innerHTML=turnPlays.map(t=>`<span>${t}</span>`).join('');
+    
+    const resultEl=$('last-result');
+    resultEl.style.display='block';
+    resultEl.className='result'+(res.role!=='なし'?' highlight':'');
+    resultEl.innerHTML=`<strong>${selVals.join('')}</strong> → 
+      役: <strong>${res.role}</strong> (+${res.pts}点)<br>
+      <small>まだカードが残っていれば続けて出せます。終わったら「ターン終了」を押してください。</small>`;
+    
+    renderHand();
+  }
+
+  function endTurn(){
+    const p=players[currentIdx];
+    p.score+=turnScore;
+    
+    const sortedUsed=[...usedIndices].sort((a,b)=>b-a);
+    sortedUsed.forEach(i=>p.hand.splice(i,1));
+    while(p.hand.length<handSize && deck.length>0){
+      p.hand.push(deck.pop());
+    }
+    
+    // ターン状態リセット
+    turnScore=0;
+    turnPlays=[];
+    usedIndices.clear();
+    selectedOrder=[];
+    exchangeSelected=[];
+    
+    // 次のプレイヤー
+    currentIdx=(currentIdx+1)%players.length;
+    if(currentIdx===0){
+      round++;
+      // 3ターン終了チェック
+      if(round>MAX_ROUNDS){
+        showGameOver();
+        return;
+      }
+    }
+    
+    $('last-result').style.display='none';
+    renderGame();
+    showExchangePhase();
+  }
+
+  function showGameOver(){
+    const ranked = getRankedPlayers();
+    const winner = ranked[0];
+    
+    $('winner-display').textContent=`🏆 ${winner.name} の勝利！`;
+    $('final-scoreboard').innerHTML=ranked.map((p,i)=>{
+      const medals = ['🥇','🥈','🥉'];
+      const medal = medals[i] || `${i+1}位`;
+      return `<div class="scoreboard-item${i===0?' winner':''}">
+        <div style="display:flex;align-items:center">
+          <div class="rank">${i+1}</div>
+          <div>
+            <div style="font-weight:600">${medal} ${p.name}</div>
+          </div>
+        </div>
+        <div style="font-size:24px;font-weight:700">${p.score}点</div>
+      </div>`;
+    }).join('');
+    
+    $('game-over-modal').classList.add('show');
+    $('game-panel').style.display='none';
+    $('hand-panel').style.display='none';
+  }
+
+  function startGame(){
+    if(players.length<2){
+      alert('2人以上必要です');
+      return;
+    }
+    buildDeck();
+    round=1;
+    currentIdx=0;
+    turnScore=0;
+    turnPlays=[];
+    usedIndices.clear();
+    selectedOrder=[];
+    exchangeSelected=[];
+    
+    players.forEach(p=>{p.hand=[];p.score=0});
+    for(let i=0;i<handSize;i++){
+      players.forEach(p=>{if(deck.length)p.hand.push(deck.pop())});
+    }
+    
+    $('setup-panel').style.display='none';
+    $('game-panel').style.display='block';
+    $('hand-panel').style.display='block';
+    $('last-result').style.display='none';
+    $('game-over-modal').classList.remove('show');
+    
+    renderGame();
+    showExchangePhase();
+  }
+
+  function reset(){
+    deck=[];players=[];currentIdx=0;round=0;
+    turnScore=0;turnPlays=[];usedIndices.clear();selectedOrder=[];exchangeSelected=[];
+    $('setup-panel').style.display='block';
+    $('game-panel').style.display='none';
+    $('hand-panel').style.display='none';
+    $('game-over-modal').classList.remove('show');
+    players.push({name:'あなた',hand:[],score:0,color:COLORS[0]});
+    players.push({name:'ともだち',hand:[],score:0,color:COLORS[1]});
+    renderSetup();
+  }
+
+  // イベント
+  $('add-player').onclick=()=>{
+    const n=$('player-name').value.trim();
+    if(!n){alert('名前を入力');return}
+    players.push({name:n,hand:[],score:0,color:COLORS[players.length%COLORS.length]});
+    $('player-name').value='';
+    renderSetup();
+  };
+  $('player-name').onkeydown=e=>{if(e.key==='Enter')$('add-player').click()};
+  $('start-game').onclick=startGame;
+  $('reset').onclick=reset;
+  $('replay-btn').onclick=reset;
+  $('do-exchange-btn').onclick=doExchange;
+  $('skip-exchange-btn').onclick=skipExchange;
+  $('play-btn').onclick=playCards;
+  $('end-turn-btn').onclick=endTurn;
+  $('clear-btn').onclick=()=>{
+    $('hand-cards').querySelectorAll('.selected').forEach(e=>e.classList.remove('selected'));
+    selectedOrder=[];
+    $('selected-list').textContent='（なし）';
+  };
+
+  reset();
+})();
+  </script>
+</body>
+</html>
